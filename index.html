@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EmojiCut</title> <!-- Updated title here -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #2c3e50; /* Dark blue background */
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #ecf0f1;
+            flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #gameCanvas {
+            background-color: #34495e; /* Slightly lighter blue for canvas */
+            display: block;
+            border-radius: 15px;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+            touch-action: none; /* Prevent browser default touch actions */
+            max-width: 95vw; /* Ensure it fits on smaller screens */
+            max-height: 80vh; /* Limit height */
+            border: 5px solid #2980b9; /* Border around the canvas */
+        }
+
+        #gameInfo {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 30px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #ecf0f1;
+            z-index: 10;
+        }
+
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            color: white;
+            font-size: 2em;
+            text-align: center;
+            border-radius: 15px;
+        }
+
+        #restartButton {
+            padding: 15px 30px;
+            font-size: 1.2em;
+            font-weight: bold;
+            background: linear-gradient(145deg, #27ae60, #2ecc71); /* Green gradient */
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            margin-top: 20px;
+        }
+
+        #restartButton:hover {
+            background: linear-gradient(145deg, #2ecc71, #27ae60);
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        #restartButton:active {
+            transform: translateY(1px);
+            box-shadow: 0 3px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        #modeSelection {
+            margin-bottom: 20px;
+            display: flex;
+            gap: 15px;
+            z-index: 10;
+        }
+
+        .mode-button {
+            padding: 10px 20px;
+            font-size: 1.1em;
+            font-weight: bold;
+            background: linear-gradient(145deg, #3498db, #2980b9); /* Blue gradient */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+            transition: all 0.2s ease;
+        }
+
+        .mode-button:hover {
+            background: linear-gradient(145deg, #2980b9, #3498db);
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .mode-button.active {
+            background: linear-gradient(145deg, #e67e22, #d35400); /* Orange gradient for active */
+            transform: translateY(0);
+            box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.3);
+        }
+
+        /* Responsive adjustments */
+        @media (max-width: 768px) {
+            #gameInfo {
+                font-size: 1.2em;
+                gap: 15px;
+                top: 10px;
+            }
+            #gameOverScreen {
+                font-size: 1.5em;
+            }
+            #restartButton {
+                padding: 12px 25px;
+                font-size: 1em;
+            }
+            .mode-button {
+                padding: 8px 15px;
+                font-size: 0.9em;
+            }
+            #modeSelection {
+                flex-direction: column;
+                gap: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="modeSelection">
+        <button id="classicModeBtn" class="mode-button active">Classic Mode</button>
+        <button id="zenModeBtn" class="mode-button">Zen Mode</button>
+    </div>
+    <div id="gameInfo">
+        <span id="score">Score: 0</span>
+        <span id="lives">Lives: 5</span>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <div id="gameOverScreen" style="display: none;">
+        <h1>Game Over!</h1> <!-- Updated title here -->
+        <p>Your final score: <span id="finalScore">0</span></p>
+        <button id="restartButton">Play Again</button>
+    </div>
+
+    <script>
+        // Get canvas and context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Get game info elements
+        const scoreDisplay = document.getElementById('score');
+        const livesDisplay = document.getElementById('lives');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const restartButton = document.getElementById('restartButton');
+        const classicModeBtn = document.getElementById('classicModeBtn');
+        const zenModeBtn = document.getElementById('zenModeBtn');
+
+        // Game variables
+        let score = 0;
+        let lives = 5;
+        let gameRunning = false;
+        let lastFrameTime = 0;
+        let gameMode = 'classic'; // Default game mode
+
+        // Arrays to hold game objects
+        const fruits = [];
+        const slicedFruits = []; // Now holds a single SlicedFruit object per sliced item
+        const sliceTrails = []; // To draw the slicing line
+        const explosions = []; // New array for explosion effects
+
+        // Game settings
+        const FRUIT_EMOJIS = ['🍎', '🍏', '🍊', '🍋', '🍉', '🍇', '🍓', '🍈', '🍒', '🍑', '🥭', '🍍', '🍌', '🥝', '🥑', '🥥'];
+        const BOMB_EMOJI = '💣';
+        const GRAVITY = 0.3; // Gravity strength
+        const FRUIT_SIZE = 60; // Size of the emoji
+        const FRUIT_SPAWN_INTERVAL = 1000; // Milliseconds between fruit spawns
+        const MAX_FRUITS_ON_SCREEN = 5;
+        const SLICE_TRAIL_LENGTH = 10; // Number of points in the slice trail
+        const SLICE_TRAIL_FADE_TIME = 200; // Milliseconds for trail to fade
+        const SLICED_FRUIT_FADE_DURATION = 600; // Milliseconds for sliced fruit to fade out
+        const EXPLOSION_DURATION = 500; // Milliseconds for explosion particles to fade
+
+        // Mouse/Touch tracking variables
+        let isSlicing = false;
+        let sliceStart = { x: 0, y: 0 };
+        let sliceEnd = { x: 0, y: 0 };
+        let currentSlicePath = []; // Stores points for the current slice trail
+
+        // Adjust canvas size to fit window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth * 0.9;
+            canvas.height = window.innerHeight * 0.7;
+            // Ensure canvas dimensions are at least a minimum size for playability
+            if (canvas.width < 300) canvas.width = 300;
+            if (canvas.height < 400) canvas.height = 400;
+        }
+
+        // Call resize on load and on window resize
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Fruit Class
+        class Fruit {
+            constructor(x, y, emoji, isBomb = false) {
+                this.x = x;
+                this.y = y;
+                this.radius = FRUIT_SIZE / 2;
+                this.emoji = emoji;
+                this.vy = -Math.random() * 2 - 15; // Range -15 to -17
+                this.vx = (Math.random() - 0.5) * 1.5; // Range -0.75 to 0.75
+                this.isBomb = isBomb;
+                this.sliced = false;
+
+                if (this.isBomb) {
+                    this.hitboxRadius = this.radius * 0.8;
+                } else {
+                    this.hitboxRadius = this.radius * 1.2;
+                }
+            }
+
+            update(deltaTime) {
+                this.x += this.vx * deltaTime / 16;
+                this.y += this.vy * deltaTime / 16;
+                this.vy += GRAVITY * deltaTime / 16;
+
+                if (this.x - this.radius < 0) {
+                    this.x = this.radius;
+                    this.vx *= -0.8;
+                } else if (this.x + this.radius > canvas.width) {
+                    this.x = canvas.width - this.radius;
+                    this.vx *= -0.8;
+                }
+            }
+
+            draw() {
+                ctx.font = `${FRUIT_SIZE}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, this.x, this.y);
+            }
+
+            contains(px, py) {
+                const distSq = (px - this.x) * (px - this.x) + (py - this.y) * (py - this.y);
+                return distSq < this.hitboxRadius * this.hitboxRadius;
+            }
+        }
+
+        // Sliced Fruit Class (manages both halves)
+        class SlicedFruit {
+            constructor(fruit, sliceAngle) {
+                this.emoji = fruit.emoji;
+                this.radius = FRUIT_SIZE / 2;
+                this.isBomb = fruit.isBomb;
+                this.sliceAngle = sliceAngle;
+
+                const impulseStrength = 5; // Strength of the initial push apart
+                const perpendicularAngle = this.sliceAngle + Math.PI / 2; // Angle perpendicular to the slice line
+
+                // Initialize properties for the left half
+                this.leftHalf = {
+                    x: fruit.x,
+                    y: fruit.y,
+                    // Inherit original fruit's velocity, then add impulse
+                    vx: fruit.vx + impulseStrength * Math.cos(perpendicularAngle + Math.PI),
+                    vy: fruit.vy + impulseStrength * Math.sin(perpendicularAngle + Math.PI),
+                    rotation: Math.random() * Math.PI * 2,
+                    angularVelocity: (Math.random() - 0.5) * 0.4
+                };
+
+                // Initialize properties for the right half
+                this.rightHalf = {
+                    x: fruit.x,
+                    y: fruit.y,
+                    // Inherit original fruit's velocity, then add impulse
+                    vx: fruit.vx + impulseStrength * Math.cos(perpendicularAngle),
+                    vy: fruit.vy + impulseStrength * Math.sin(perpendicularAngle),
+                    rotation: Math.random() * Math.PI * 2,
+                    angularVelocity: (Math.random() - 0.5) * 0.4
+                };
+
+                this.creationTime = performance.now();
+            }
+
+            update(deltaTime) {
+                // Update left half
+                this.leftHalf.x += this.leftHalf.vx * deltaTime / 16;
+                this.leftHalf.y += this.leftHalf.vy * deltaTime / 16;
+                this.leftHalf.vy += GRAVITY * deltaTime / 16;
+                this.leftHalf.rotation += this.leftHalf.angularVelocity * deltaTime / 16;
+
+                // Update right half
+                this.rightHalf.x += this.rightHalf.vx * deltaTime / 16;
+                this.rightHalf.y += this.rightHalf.vy * deltaTime / 16;
+                this.rightHalf.vy += GRAVITY * deltaTime / 16;
+                this.rightHalf.rotation += this.rightHalf.angularVelocity * deltaTime / 16;
+            }
+
+            draw(currentTime) {
+                const age = currentTime - this.creationTime;
+                let alpha = 1 - (age / SLICED_FRUIT_FADE_DURATION);
+                if (alpha < 0) alpha = 0;
+                ctx.globalAlpha = alpha;
+
+                // Draw Left Half
+                ctx.save();
+                ctx.translate(this.leftHalf.x, this.leftHalf.y);
+                ctx.rotate(this.leftHalf.rotation);
+                ctx.rotate(-this.sliceAngle); // Align slice to vertical
+
+                ctx.beginPath();
+                const clipBuffer = 2; // Small buffer for clean edges
+                ctx.rect(-this.radius - clipBuffer, -this.radius - clipBuffer, this.radius + clipBuffer, FRUIT_SIZE + 2 * clipBuffer);
+                ctx.clip();
+                ctx.font = `${FRUIT_SIZE}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, 0, 0);
+                ctx.restore();
+
+                // Draw Right Half
+                ctx.save();
+                ctx.translate(this.rightHalf.x, this.rightHalf.y);
+                ctx.rotate(this.rightHalf.rotation);
+                ctx.rotate(-this.sliceAngle); // Align slice to vertical
+
+                ctx.beginPath();
+                ctx.rect(0, -this.radius - clipBuffer, this.radius + clipBuffer, FRUIT_SIZE + 2 * clipBuffer);
+                ctx.clip();
+                ctx.font = `${FRUIT_SIZE}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, 0, 0);
+                ctx.restore();
+
+                // Reset global alpha after drawing both halves
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // Explosion Effect Class
+        class ExplosionParticle {
+            constructor(x, y, emoji, initialVx, initialVy) {
+                this.x = x;
+                this.y = y;
+                this.emoji = emoji;
+                this.vx = initialVx;
+                this.vy = initialVy;
+                this.creationTime = performance.now();
+                // Adjust size based on emoji type
+                if (this.emoji === '💥') {
+                    this.size = FRUIT_SIZE * 3; // Significantly larger for the bang (3x as requested)
+                } else {
+                    this.size = FRUIT_SIZE * 0.7; // Smaller size for cloud particles
+                }
+            }
+
+            update(deltaTime) {
+                this.x += this.vx * deltaTime / 16;
+                this.y += this.vy * deltaTime / 16;
+                this.vy += GRAVITY * deltaTime / 16; // Particles are also affected by gravity
+            }
+
+            draw(currentTime) {
+                const age = currentTime - this.creationTime;
+                let alpha = 1 - (age / EXPLOSION_DURATION);
+                if (alpha < 0) alpha = 0;
+                ctx.globalAlpha = alpha;
+
+                ctx.font = `${this.size}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(this.emoji, this.x, this.y);
+                ctx.globalAlpha = 1; // Reset alpha for other drawings
+            }
+        }
+
+        class ExplosionEffect {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.particles = [];
+                this.creationTime = performance.now();
+
+                // Add the initial bang emoji
+                this.particles.push(new ExplosionParticle(x, y, '💥', 0, 0));
+
+                // Add smoke/cloud particles
+                const numClouds = 5 + Math.floor(Math.random() * 3); // 5-7 clouds
+                for (let i = 0; i < numClouds; i++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = 2 + Math.random() * 5;
+                    this.particles.push(new ExplosionParticle(
+                        x, y, '💨',
+                        speed * Math.cos(angle),
+                        speed * Math.sin(angle)
+                    ));
+                }
+            }
+
+            update(deltaTime) {
+                for (let i = this.particles.length - 1; i >= 0; i--) {
+                    this.particles[i].update(deltaTime);
+                    const age = performance.now() - this.particles[i].creationTime;
+                    if (age > EXPLOSION_DURATION) {
+                        this.particles.splice(i, 1);
+                    }
+                }
+            }
+
+            draw(currentTime) {
+                this.particles.forEach(p => p.draw(currentTime));
+            }
+
+            isFinished() {
+                return this.particles.length === 0;
+            }
+        }
+
+
+        // Function to spawn a new fruit
+        function spawnFruit() {
+            if (fruits.length >= MAX_FRUITS_ON_SCREEN) return;
+
+            const x = Math.random() * (canvas.width - FRUIT_SIZE * 2) + FRUIT_SIZE;
+            const y = canvas.height + FRUIT_SIZE / 2;
+
+            let isBomb = false;
+            if (gameMode === 'classic') {
+                isBomb = Math.random() < 0.15; // 15% chance to spawn a bomb in classic mode
+            }
+            // In Zen mode, isBomb remains false
+
+            const emoji = isBomb ? BOMB_EMOJI : FRUIT_EMOJIS[Math.floor(Math.random() * FRUIT_EMOJIS.length)];
+
+            fruits.push(new Fruit(x, y, emoji, isBomb));
+        }
+
+        let lastSpawnTime = 0;
+        function updateGame(currentTime) {
+            if (!gameRunning) return;
+
+            const deltaTime = currentTime - lastFrameTime;
+            lastFrameTime = currentTime;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            if (currentTime - lastSpawnTime > FRUIT_SPAWN_INTERVAL) {
+                spawnFruit();
+                lastSpawnTime = currentTime;
+            }
+
+            // Update and draw fruits
+            for (let i = fruits.length - 1; i >= 0; i--) {
+                const fruit = fruits[i];
+                fruit.update(deltaTime);
+                fruit.draw();
+
+                // Lives are lost only in Classic mode if a fruit is missed
+                if (gameMode === 'classic' && fruit.y > canvas.height + FRUIT_SIZE && !fruit.sliced) {
+                    if (!fruit.isBomb) { // Only lose life for unsliced fruits, not bombs
+                        lives--;
+                        livesDisplay.textContent = `Lives: ${lives}`;
+                    }
+                    fruits.splice(i, 1);
+                    if (lives <= 0) {
+                        endGame();
+                        return;
+                    }
+                } else if (gameMode === 'zen' && fruit.y > canvas.height + FRUIT_SIZE && !fruit.sliced) {
+                    // In Zen mode, just remove the fruit if missed, no life lost
+                    fruits.splice(i, 1);
+                }
+            }
+
+            // Update and draw sliced fruits (now only one object per sliced item)
+            for (let i = slicedFruits.length - 1; i >= 0; i--) {
+                const slicedFruit = slicedFruits[i];
+                slicedFruit.update(deltaTime);
+                slicedFruit.draw(currentTime); // Pass current time for fading
+
+                // Remove if off-screen or faded out
+                const age = currentTime - slicedFruit.creationTime;
+                if ((slicedFruit.leftHalf.y > canvas.height + FRUIT_SIZE && slicedFruit.rightHalf.y > canvas.height + FRUIT_SIZE) || age > SLICED_FRUIT_FADE_DURATION) {
+                    slicedFruits.splice(i, 1);
+                }
+            }
+
+            // Update and draw explosions
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const explosion = explosions[i];
+                explosion.update(deltaTime);
+                explosion.draw(currentTime);
+                if (explosion.isFinished()) {
+                    explosions.splice(i, 1);
+                }
+            }
+
+            // Draw slice trails
+            for (let i = sliceTrails.length - 1; i >= 0; i--) {
+                const trail = sliceTrails[i];
+                const age = currentTime - trail.timestamp;
+                if (age > SLICE_TRAIL_FADE_TIME) {
+                    sliceTrails.splice(i, 1);
+                } else {
+                    ctx.save();
+                    ctx.strokeStyle = `rgba(255, 255, 255, ${1 - (age / SLICE_TRAIL_FADE_TIME)})`;
+                    ctx.lineWidth = 5;
+                    ctx.lineCap = 'round';
+                    ctx.beginPath();
+                    ctx.moveTo(trail.path[0].x, trail.path[0].y);
+                    for (let j = 1; j < trail.path.length; j++) {
+                        ctx.lineTo(trail.path[j].x, trail.path[j].y);
+                    }
+                    ctx.stroke();
+                    ctx.restore();
+                }
+            }
+
+            requestAnimationFrame(updateGame);
+        }
+
+        // Handle slicing logic
+        function handleSlice(currentX, currentY) {
+            if (!isSlicing) return;
+
+            currentSlicePath.push({ x: currentX, y: currentY });
+            if (currentSlicePath.length > SLICE_TRAIL_LENGTH) {
+                currentSlicePath.shift();
+            }
+
+            sliceTrails.push({ path: [...currentSlicePath], timestamp: performance.now() });
+
+            for (let i = fruits.length - 1; i >= 0; i--) {
+                const fruit = fruits[i];
+                if (!fruit.sliced && fruit.contains(currentX, currentY)) {
+                    fruit.sliced = true;
+
+                    if (fruit.isBomb) {
+                        lives--; // Only deduct one life for bomb
+                        livesDisplay.textContent = `Lives: ${lives}`;
+                        explosions.push(new ExplosionEffect(fruit.x, fruit.y)); // Create explosion
+                        if (lives <= 0) {
+                            endGame();
+                            return;
+                        }
+                    } else {
+                        score++;
+                        scoreDisplay.textContent = `Score: ${score}`;
+                        // Create only ONE SlicedFruit object that manages both halves for fruits
+                        slicedFruits.push(new SlicedFruit(fruit, currentSlicePath.length >= 2 ? Math.atan2(currentSlicePath[currentSlicePath.length - 1].y - currentSlicePath[currentSlicePath.length - 2].y, currentSlicePath[currentSlicePath.length - 1].x - currentSlicePath[currentSlicePath.length - 2].x) : -Math.PI / 2));
+                    }
+
+                    fruits.splice(i, 1); // Remove the original fruit (or bomb)
+                }
+            }
+        }
+
+        // Mouse events
+        canvas.addEventListener('mousedown', (e) => {
+            isSlicing = true;
+            const rect = canvas.getBoundingClientRect();
+            sliceStart = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+            currentSlicePath = [{ x: sliceStart.x, y: sliceStart.y }];
+            handleSlice(sliceStart.x, sliceStart.y);
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            if (isSlicing) {
+                const rect = canvas.getBoundingClientRect();
+                sliceEnd = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                handleSlice(sliceEnd.x, sliceEnd.y);
+            }
+        });
+
+        canvas.addEventListener('mouseup', () => {
+            isSlicing = false;
+            currentSlicePath = [];
+        });
+
+        canvas.addEventListener('mouseleave', () => {
+            isSlicing = false;
+            currentSlicePath = [];
+        });
+
+        // Touch events for mobile
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isSlicing = true;
+            const rect = canvas.getBoundingClientRect();
+            sliceStart = { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+            currentSlicePath = [{ x: sliceStart.x, y: sliceStart.y }];
+            handleSlice(sliceStart.x, sliceStart.y);
+        });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (isSlicing) {
+                const rect = canvas.getBoundingClientRect();
+                sliceEnd = { x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top };
+                handleSlice(sliceEnd.x, sliceEnd.y);
+            }
+        });
+
+        canvas.addEventListener('touchend', () => {
+            isSlicing = false;
+            currentSlicePath = [];
+        });
+
+        canvas.addEventListener('touchcancel', () => {
+            isSlicing = false;
+            currentSlicePath = [];
+        });
+
+        // Game state functions
+        function startGame() {
+            score = 0;
+            lives = 5;
+            fruits.length = 0;
+            slicedFruits.length = 0;
+            sliceTrails.length = 0;
+            explosions.length = 0; // Clear explosions on new game
+            scoreDisplay.textContent = `Score: ${score}`;
+            livesDisplay.textContent = `Lives: ${lives}`;
+            gameOverScreen.style.display = 'none';
+            gameRunning = true;
+            lastFrameTime = performance.now();
+            lastSpawnTime = performance.now();
+
+            // Set lives display visibility based on mode when starting game
+            if (gameMode === 'zen') {
+                livesDisplay.style.display = 'none';
+            } else {
+                livesDisplay.style.display = 'inline-block';
+            }
+
+            requestAnimationFrame(updateGame);
+        }
+
+        function endGame() {
+            gameRunning = false;
+            finalScoreDisplay.textContent = score;
+            gameOverScreen.style.display = 'flex';
+        }
+
+        restartButton.addEventListener('click', startGame);
+
+        // Mode selection event listeners
+        classicModeBtn.addEventListener('click', () => {
+            gameMode = 'classic';
+            classicModeBtn.classList.add('active');
+            zenModeBtn.classList.remove('active');
+            // Always show lives in classic mode
+            livesDisplay.style.display = 'inline-block';
+            if (!gameRunning) {
+                lives = 5;
+                livesDisplay.textContent = `Lives: ${lives}`;
+            }
+        });
+
+        zenModeBtn.addEventListener('click', () => {
+            gameMode = 'zen';
+            zenModeBtn.classList.add('active');
+            classicModeBtn.classList.remove('active');
+            // Always hide lives in zen mode
+            livesDisplay.style.display = 'none';
+            if (!gameRunning) {
+                lives = 5; // Zen mode still uses lives, just no bombs to lose them
+                livesDisplay.textContent = `Lives: ${lives}`;
+            }
+        });
+
+        window.onload = startGame;
+    </script>
+</body>
+</html>
